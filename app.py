@@ -1,22 +1,13 @@
 import datetime
 import re
 import streamlit as st
+from PIL import Image
+import pytesseract
 
-# Set wide layout and title
-st.set_page_config(page_title="User Budget & ID Tracker", layout="wide")
+st.set_page_config(page_title="Email Intimation Parser", layout="wide")
 
-
-# Parsing logic
 def parse_email_text(raw_text: str) -> dict:
-    if not raw_text.strip():
-        return {
-            "email_id": "",
-            "display_name": "",
-            "request_number": "",
-            "requester": "",
-        }
-
-    # 1. Extract UPN / Email ID
+    # 1. Email ID
     email_match = re.search(
         r'Email\s*ID\s*:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
         raw_text,
@@ -25,24 +16,18 @@ def parse_email_text(raw_text: str) -> dict:
     if email_match:
         email_id = email_match.group(1).strip()
     else:
-        fallback = re.findall(
-            r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', raw_text
-        )
+        fallback = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', raw_text)
         email_id = fallback[0] if fallback else ""
 
-    # 2. Extract Requester (Full Name after 'To')
-    requester_match = re.search(
-        r'To\s*:?\s*([A-Za-z]+(?:\s+[A-Za-z]+)+)', raw_text, re.IGNORECASE
-    )
+    # 2. Requester (Full Name after 'To')
+    requester_match = re.search(r'To\s*:?\s*([A-Za-z]+(?:\s+[A-Za-z]+)+)', raw_text, re.IGNORECASE)
     requester = requester_match.group(1).strip() if requester_match else ""
 
-    # 3. Extract Display Name
-    display_match = re.search(
-        r'Display\s*Name\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE
-    )
+    # 3. Display Name
+    display_match = re.search(r'Display\s*Name\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
     display_name = display_match.group(1).strip() if display_match else ""
 
-    # 4. Extract Request Number (e.g., ##RE-42661##)
+    # 4. Request Number
     request_match = re.search(r'##RE-\d+##', raw_text)
     request_number = request_match.group(0) if request_match else ""
 
@@ -53,56 +38,45 @@ def parse_email_text(raw_text: str) -> dict:
         "requester": requester,
     }
 
+st.title("Upload Email Screenshot")
 
-# Header
-st.title("Email Intimation Parser")
-st.markdown("Paste the raw email content on the left to extract details.")
+# Initialize session state so data doesn't wipe when typing
+if "parsed_data" not in st.session_state:
+    st.session_state["parsed_data"] = {
+        "email_id": "", "display_name": "", "request_number": "", "requester": ""
+    }
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Paste Email Text")
-    pasted_text = st.text_area(
-        "Paste the complete email content here:",
-        height=350,
-        placeholder="Paste your email text here...",
-    )
+    st.subheader("Upload Screenshot")
+    uploaded_file = st.file_uploader("Upload screenshot (PNG, JPG)", type=["png", "jpg", "jpeg"])
 
-    # Automatically parse on paste/change
-    parsed_data = parse_email_text(pasted_text)
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
+        
+        if st.button("Extract Data from Image", type="primary"):
+            with st.spinner("Extracting text via OCR..."):
+                try:
+                    # Open image and extract text
+                    image = Image.open(uploaded_file)
+                    extracted_text = pytesseract.image_to_string(image)
+                    
+                    # Parse the text
+                    st.session_state["parsed_data"] = parse_email_text(extracted_text)
+                    st.success("Extraction Complete!")
+                except Exception as e:
+                    st.error(f"OCR Error: {e}")
 
 with col2:
     st.subheader("Extracted Details & Manual Inputs")
 
-    email_val = st.text_input(
-        "UPN / Email ID",
-        value=parsed_data["email_id"],
-        key="email_input",
-    )
-    display_val = st.text_input(
-        "Display Name",
-        value=parsed_data["display_name"],
-        key="display_input",
-    )
-    created_val = st.text_input(
-        "When Created",
-        value=datetime.date.today().strftime("%Y/%m/%d"),
-        key="created_input",
-    )
-    req_num_val = st.text_input(
-        "Request Number",
-        value=parsed_data["request_number"],
-        key="req_num_input",
-    )
-    requester_val = st.text_input(
-        "Requester",
-        value=parsed_data["requester"],
-        key="requester_input",
-    )
+    email_val = st.text_input("UPN / Email ID", value=st.session_state["parsed_data"]["email_id"])
+    display_val = st.text_input("Display Name", value=st.session_state["parsed_data"]["display_name"])
+    created_val = st.text_input("When Created", value=datetime.date.today().strftime("%Y/%m/%d"))
+    req_num_val = st.text_input("Request Number", value=st.session_state["parsed_data"]["request_number"])
+    requester_val = st.text_input("Requester", value=st.session_state["parsed_data"]["requester"])
     location_val = st.selectbox("Location", ["GGN", "DEL", "MUM", "OTH"])
 
     if st.button("Submit Details", type="primary"):
-        if email_val and requester_val:
-            st.success("Details Submitted Successfully!")
-        else:
-            st.warning("Please paste email text or fill in required fields.")
+        st.success("Details Submitted Successfully!")
