@@ -1,3 +1,5 @@
-streamlit
-Pillow
-pytesseract
+streamlit==1.36.0
+Pillow==10.4.0
+pytesseract==0.3.10
+pandas==2.2.2
+openpyxl==3.1.5
