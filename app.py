@@ -13,9 +13,10 @@ st.set_page_config(page_title="User Budget & ID Tracker", layout="wide")
 # 1. GOOGLE SHEETS LIVE CONNECTION
 # ==========================================
 using_gsheets = False
+df_existing = pd.DataFrame()
+
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    # Read live data from sheet (ttl=0 forces fetching fresh data every time)
     df_existing = conn.read(worksheet="Sheet1", ttl=0)
     if df_existing is None or df_existing.empty:
         df_existing = pd.DataFrame(
@@ -30,8 +31,8 @@ try:
             ]
         )
     using_gsheets = True
-except Exception:
-    # Fallback to local session state if Google Sheets secrets aren't set yet
+except Exception as e:
+    st.sidebar.error(f"⚠️ GSheets Connection Not Active:\n{e}")
     if "entries" not in st.session_state:
         st.session_state["entries"] = []
     df_existing = pd.DataFrame(st.session_state["entries"])
@@ -117,19 +118,12 @@ if "parsed_data" not in st.session_state:
 st.sidebar.title("⚙️ Budget Settings")
 st.sidebar.markdown("Customize total allotted budget per location:")
 
-budget_ggn = st.sidebar.number_input(
-    "GGN Budget", min_value=0, value=30, step=1
-)
-budget_msr = st.sidebar.number_input(
-    "MSR Budget", min_value=0, value=25, step=1
-)
-budget_pune = st.sidebar.number_input(
-    "Pune Budget", min_value=0, value=15, step=1
-)
+budget_ggn = st.sidebar.number_input("GGN Budget", min_value=0, value=30, step=1)
+budget_msr = st.sidebar.number_input("MSR Budget", min_value=0, value=25, step=1)
+budget_pune = st.sidebar.number_input("Pune Budget", min_value=0, value=15, step=1)
 
 budget_limits = {"GGN": budget_ggn, "MSR": budget_msr, "Pune": budget_pune}
 
-# Count usage from active sheet/dataframe
 used_counts = (
     df_existing["Location"].value_counts().to_dict()
     if not df_existing.empty and "Location" in df_existing.columns
@@ -156,9 +150,9 @@ for loc in ["GGN", "MSR", "Pune"]:
 st.title("User Budget & ID Tracker")
 
 if using_gsheets:
-    st.caption("🟢 Connected to Google Sheets (Permanent Cloud Sync Active)")
+    st.success("🟢 Connected to Google Sheets (Cloud Sync Active)")
 else:
-    st.caption("🟡 Running in Temporary Mode (Set up Google Sheets secrets for permanent storage)")
+    st.warning("🟡 Running in Temporary Mode (Google Sheets credentials missing)")
 
 col1, col2 = st.columns(2)
 
@@ -169,18 +163,14 @@ with col1:
     )
 
     if uploaded_file is not None:
-        st.image(
-            uploaded_file, caption="Uploaded Email Image", use_column_width=True
-        )
+        st.image(uploaded_file, caption="Uploaded Email Image", use_column_width=True)
 
         if st.button("Extract Data from Image", type="primary"):
             with st.spinner("Extracting text via OCR..."):
                 try:
                     image = Image.open(uploaded_file)
                     extracted_text = pytesseract.image_to_string(image)
-                    st.session_state["parsed_data"] = parse_email_text(
-                        extracted_text
-                    )
+                    st.session_state["parsed_data"] = parse_email_text(extracted_text)
                     st.success("Extraction Complete!")
                 except Exception as e:
                     st.error(f"OCR Error: {e}")
@@ -189,15 +179,12 @@ with col2:
     st.subheader("2. Extracted Details & Manual Inputs")
 
     req_num_val = st.text_input(
-        "Request Number",
-        value=st.session_state["parsed_data"]["request_number"],
+        "Request Number", value=st.session_state["parsed_data"]["request_number"]
     )
     budget_val = st.selectbox(
         "Budget Status",
         ["Budgeted", "Unbudgeted"],
-        index=0
-        if st.session_state["parsed_data"]["budget_info"] == "Budgeted"
-        else 1,
+        index=0 if st.session_state["parsed_data"]["budget_info"] == "Budgeted" else 1,
     )
     requester_val = st.text_input(
         "Requester", value=st.session_state["parsed_data"]["requester"]
@@ -209,8 +196,7 @@ with col2:
         "Display Name", value=st.session_state["parsed_data"]["display_name"]
     )
     created_val = st.text_input(
-        "When Created",
-        value=st.session_state["parsed_data"]["when_created"],
+        "When Created", value=st.session_state["parsed_data"]["when_created"]
     )
     location_val = st.selectbox("Location", ["GGN", "MSR", "Pune"])
 
@@ -238,7 +224,7 @@ with col2:
                 st.success(f"Entry permanently saved to Google Sheets under {location_val}!")
             else:
                 st.session_state["entries"].append(new_row.to_dict("records")[0])
-                st.success(f"Entry saved under {location_val}!")
+                st.success(f"Entry saved temporarily under {location_val}!")
             st.rerun()
 
 
