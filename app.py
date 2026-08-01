@@ -22,7 +22,7 @@ try:
         df_existing = pd.DataFrame(
             columns=[
                 "Request Number",
-                "Request Type",
+                "User Type",
                 "Budget Status",
                 "Requester",
                 "UPN / Email ID",
@@ -195,8 +195,8 @@ with col2:
         "Request Number", value=st.session_state["parsed_data"]["request_number"]
     )
     
-    # NEW MANUAL OPTION: Request Type (New / Replacement)
-    request_type_val = st.selectbox("Request Type", ["New", "Replacement"], index=0)
+    # MANUAL OPTION: User Type (New / Replacement)
+    user_type_val = st.selectbox("User Type", ["New", "Replacement"], index=0)
 
     budget_val = st.selectbox(
         "Budget Status",
@@ -237,7 +237,7 @@ with col2:
                 [
                     {
                         "Request Number": req_num_val,
-                        "Request Type": request_type_val,
+                        "User Type": user_type_val,
                         "Budget Status": budget_val,
                         "Requester": requester_val,
                         "UPN / Email ID": email_val,
@@ -259,7 +259,7 @@ with col2:
 
 
 # ==========================================
-# 5. ENTRIES LOG & EXCEL DOWNLOAD
+# 5. ENTRIES LOG, DELETE, & EXCEL DOWNLOAD
 # ==========================================
 st.markdown("---")
 st.subheader("📋 Maintained Entries Log")
@@ -267,16 +267,40 @@ st.subheader("📋 Maintained Entries Log")
 if not df_existing.empty:
     st.dataframe(df_existing, use_container_width=True)
 
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_existing.to_excel(writer, index=False, sheet_name="ID_Tracker")
-    excel_data = buffer.getvalue()
+    col_dl1, col_dl2 = st.columns([1, 1])
 
-    st.download_button(
-        label="📥 Download Excel Copy (.xlsx)",
-        data=excel_data,
-        file_name=f"ID_Tracker_Log_{datetime.date.today()}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    with col_dl1:
+        st.markdown("#### 📥 Download Copy")
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_existing.to_excel(writer, index=False, sheet_name="ID_Tracker")
+        excel_data = buffer.getvalue()
+
+        st.download_button(
+            label="Download Excel Copy (.xlsx)",
+            data=excel_data,
+            file_name=f"ID_Tracker_Log_{datetime.date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    with col_dl2:
+        st.markdown("#### 🗑️ Delete Specific Entry")
+        delete_options = [
+            f"Row {idx + 1}: {row.get('Request Number', '')} | {row.get('Display Name', '')}"
+            for idx, row in df_existing.iterrows()
+        ]
+        selected_entry_to_delete = st.selectbox("Select entry to remove:", options=delete_options)
+
+        if st.button("Delete Selected Entry", type="secondary"):
+            row_idx_to_delete = int(selected_entry_to_delete.split(":")[0].replace("Row ", "")) - 1
+            df_updated = df_existing.drop(index=row_idx_to_delete).reset_index(drop=True)
+
+            if using_gsheets:
+                conn.update(worksheet="Sheet1", data=df_updated)
+                st.success("Entry removed permanently from Google Sheets!")
+            else:
+                st.session_state["entries"] = df_updated.to_dict("records")
+                st.success("Entry removed temporarily!")
+            st.rerun()
 else:
     st.info("No entries logged yet. Extract details above and click 'Save & Log to Sheet'.")
