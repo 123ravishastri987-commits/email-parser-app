@@ -40,7 +40,26 @@ except Exception as e:
 
 
 # ==========================================
-# 2. OCR & PARSER LOGIC
+# 2. PERSISTENT REQUESTER LIST MANAGEMENT
+# ==========================================
+default_requester_list = ["Tushar Agrawal", "Vikram Singh", "Keshav Saini", "Other"]
+
+if "custom_requesters" not in st.session_state:
+    if using_gsheets:
+        try:
+            df_req = conn.read(worksheet="Requesters", ttl=0)
+            if df_req is not None and not df_req.empty and "Requester Name" in df_req.columns:
+                st.session_state["custom_requesters"] = df_req["Requester Name"].dropna().tolist()
+            else:
+                st.session_state["custom_requesters"] = default_requester_list
+        except Exception:
+            st.session_state["custom_requesters"] = default_requester_list
+    else:
+        st.session_state["custom_requesters"] = default_requester_list
+
+
+# ==========================================
+# 3. OCR & PARSER LOGIC
 # ==========================================
 def parse_email_text(raw_text: str) -> dict:
     email_match = re.search(
@@ -114,7 +133,7 @@ if "parsed_data" not in st.session_state:
 
 
 # ==========================================
-# 3. SIDEBAR: BUDGET & REQUESTER SETTINGS
+# 4. SIDEBAR: BUDGET & REQUESTER SETTINGS
 # ==========================================
 st.sidebar.title("⚙️ Budget Settings")
 st.sidebar.markdown("Customize total allotted budget per location:")
@@ -129,13 +148,26 @@ st.sidebar.markdown("---")
 st.sidebar.title("👥 Requester Options")
 st.sidebar.markdown("Add or edit requester names for the dropdown (one name per line):")
 
-default_requesters_text = "Tushar Agrawal\nVikram Singh\nKeshav Saini\nOther"
+requesters_text_current = "\n".join(st.session_state["custom_requesters"])
+
 user_requesters_raw = st.sidebar.text_area(
-    "Custom Requester List", value=default_requesters_text, height=120
+    "Custom Requester List", value=requesters_text_current, height=140
 )
-custom_requester_list = [
-    name.strip() for name in user_requesters_raw.split("\n") if name.strip()
-]
+
+if st.sidebar.button("💾 Save Requester List"):
+    updated_list = [name.strip() for name in user_requesters_raw.split("\n") if name.strip()]
+    st.session_state["custom_requesters"] = updated_list
+    
+    if using_gsheets:
+        try:
+            df_req_to_save = pd.DataFrame({"Requester Name": updated_list})
+            conn.update(worksheet="Requesters", data=df_req_to_save)
+            st.sidebar.success("Saved permanently to Google Sheets!")
+        except Exception as e:
+            st.sidebar.error(f"Could not save to Sheet: {e}")
+    else:
+        st.sidebar.success("Saved for current session!")
+    st.rerun()
 
 used_counts = (
     df_existing["Location"].value_counts().to_dict()
@@ -158,7 +190,7 @@ for loc in ["GGN", "MSR", "Pune"]:
 
 
 # ==========================================
-# 4. MAIN INTERFACE
+# 5. MAIN INTERFACE
 # ==========================================
 st.title("User Budget & ID Tracker")
 
@@ -216,7 +248,7 @@ with col2:
             "Requester Name", value=st.session_state["parsed_data"]["requester"]
         )
     else:
-        requester_val = st.selectbox("Select Requester Name", options=custom_requester_list)
+        requester_val = st.selectbox("Select Requester Name", options=st.session_state["custom_requesters"])
 
     email_val = st.text_input(
         "UPN / Email ID", value=st.session_state["parsed_data"]["email_id"]
@@ -259,7 +291,7 @@ with col2:
 
 
 # ==========================================
-# 5. ENTRIES LOG, DELETE, & EXCEL DOWNLOAD
+# 6. ENTRIES LOG, DELETE, & EXCEL DOWNLOAD
 # ==========================================
 st.markdown("---")
 st.subheader("📋 Maintained Entries Log")
