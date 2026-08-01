@@ -22,6 +22,7 @@ try:
         df_existing = pd.DataFrame(
             columns=[
                 "Request Number",
+                "Request Type",
                 "Budget Status",
                 "Requester",
                 "UPN / Email ID",
@@ -113,7 +114,7 @@ if "parsed_data" not in st.session_state:
 
 
 # ==========================================
-# 3. SIDEBAR BUDGET TRACKER
+# 3. SIDEBAR: BUDGET & REQUESTER SETTINGS
 # ==========================================
 st.sidebar.title("⚙️ Budget Settings")
 st.sidebar.markdown("Customize total allotted budget per location:")
@@ -123,6 +124,18 @@ budget_msr = st.sidebar.number_input("MSR Budget", min_value=0, value=25, step=1
 budget_pune = st.sidebar.number_input("Pune Budget", min_value=0, value=15, step=1)
 
 budget_limits = {"GGN": budget_ggn, "MSR": budget_msr, "Pune": budget_pune}
+
+st.sidebar.markdown("---")
+st.sidebar.title("👥 Requester Options")
+st.sidebar.markdown("Add or edit requester names for the dropdown (one name per line):")
+
+default_requesters_text = "Tushar Agrawal\nVikram Singh\nKeshav Saini\nOther"
+user_requesters_raw = st.sidebar.text_area(
+    "Custom Requester List", value=default_requesters_text, height=120
+)
+custom_requester_list = [
+    name.strip() for name in user_requesters_raw.split("\n") if name.strip()
+]
 
 used_counts = (
     df_existing["Location"].value_counts().to_dict()
@@ -181,14 +194,30 @@ with col2:
     req_num_val = st.text_input(
         "Request Number", value=st.session_state["parsed_data"]["request_number"]
     )
+    
+    # NEW MANUAL OPTION: Request Type (New / Replacement)
+    request_type_val = st.selectbox("Request Type", ["New", "Replacement"], index=0)
+
     budget_val = st.selectbox(
         "Budget Status",
         ["Budgeted", "Unbudgeted"],
         index=0 if st.session_state["parsed_data"]["budget_info"] == "Budgeted" else 1,
     )
-    requester_val = st.text_input(
-        "Requester", value=st.session_state["parsed_data"]["requester"]
+
+    # REQUESTER OPTION: OCR vs Dropdown
+    requester_mode = st.radio(
+        "Requester Input Method",
+        ["Extracted from Photo (OCR)", "Select from Dropdown"],
+        horizontal=True,
     )
+
+    if requester_mode == "Extracted from Photo (OCR)":
+        requester_val = st.text_input(
+            "Requester Name", value=st.session_state["parsed_data"]["requester"]
+        )
+    else:
+        requester_val = st.selectbox("Select Requester Name", options=custom_requester_list)
+
     email_val = st.text_input(
         "UPN / Email ID", value=st.session_state["parsed_data"]["email_id"]
     )
@@ -208,6 +237,7 @@ with col2:
                 [
                     {
                         "Request Number": req_num_val,
+                        "Request Type": request_type_val,
                         "Budget Status": budget_val,
                         "Requester": requester_val,
                         "UPN / Email ID": email_val,
