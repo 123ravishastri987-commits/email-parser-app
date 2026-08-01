@@ -1,6 +1,7 @@
 streamlit
-Pillow
-pytesseract
 pandas
-openpyxl
+pytesseract
+Pillow
 st-gsheets-connection
+openpyxl
+streamlit-paste-button
