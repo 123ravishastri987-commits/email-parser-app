@@ -6,6 +6,7 @@ from PIL import Image
 import pytesseract
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+from streamlit_paste_button import paste_image_button
 
 st.set_page_config(page_title="User Budget & ID Tracker", layout="wide")
 
@@ -202,19 +203,35 @@ else:
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("1. Upload Screenshot")
-    uploaded_file = st.file_uploader(
-        "Upload screenshot (PNG, JPG)", type=["png", "jpg", "jpeg"]
+    st.subheader("1. Screenshot Input")
+    st.markdown("Take a screenshot, then **paste directly** or upload below:")
+
+    # CLIPBOARD PASTE BUTTON
+    paste_result = paste_image_button(
+        label="📋 Paste Screenshot from Clipboard",
+        text_color="#ffffff",
+        background_color="#28a745",
+        hover_background_color="#218838",
     )
 
-    if uploaded_file is not None:
-        st.image(uploaded_file, caption="Uploaded Email Image", use_column_width=True)
+    uploaded_file = st.file_uploader(
+        "Or upload file (PNG, JPG)", type=["png", "jpg", "jpeg"]
+    )
 
+    image_to_process = None
+
+    if paste_result.image_data is not None:
+        image_to_process = paste_result.image_data
+        st.image(image_to_process, caption="Pasted Screenshot from Clipboard", use_column_width=True)
+    elif uploaded_file is not None:
+        image_to_process = Image.open(uploaded_file)
+        st.image(image_to_process, caption="Uploaded Email Image", use_column_width=True)
+
+    if image_to_process is not None:
         if st.button("Extract Data from Image", type="primary"):
             with st.spinner("Extracting text via OCR..."):
                 try:
-                    image = Image.open(uploaded_file)
-                    extracted_text = pytesseract.image_to_string(image)
+                    extracted_text = pytesseract.image_to_string(image_to_process)
                     st.session_state["parsed_data"] = parse_email_text(extracted_text)
                     st.success("Extraction Complete!")
                 except Exception as e:
